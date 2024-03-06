@@ -1,15 +1,15 @@
 """
-Course: CSE 251 
-Lesson: L04 Prove
-File:   prove.py
-Author: <Add name here>
+Course: CSE 251
+Lesson Week: 04
+File: assignment.py
+Author: Dallin Olson
 
 Purpose: Assignment 04 - Factory and Dealership
 
 Instructions:
 
-- Complete the assignments TODO sections and DO NOT edit parts you were told to leave alone.
-- Review the full instructions in Canvas; there are a lot of DO NOTS in this lesson.
+- See I-Learn
+
 """
 
 import time
@@ -19,7 +19,7 @@ import random
 # Include cse 251 common Python files
 from cse251 import *
 
-# Global Constants - DO NOT CHANGE
+# Global Consts - Do not change
 CARS_TO_PRODUCE = 500
 MAX_QUEUE_SIZE = 10
 SLEEP_REDUCE_FACTOR = 50
@@ -49,12 +49,11 @@ class Car():
         # Sleep a little.  Last statement in this for loop - don't change
         time.sleep(random.random() / (SLEEP_REDUCE_FACTOR))
 
-        # Display the car that has was just created in the terminal
-        print(f'Created: {self.info()}')
+        # Display the car that has just be created in the terminal
+        self.display()
            
-    def info(self):
-        """ Helper function to quickly get the car information. """
-        return f'{self.make} {self.model}, {self.year}'
+    def display(self):
+        print(f'{self.make} {self.model}, {self.year}')
 
 
 class Queue251():
@@ -77,15 +76,26 @@ class Queue251():
 class Factory(threading.Thread):
     """ This is a factory.  It will create cars and place them on the car queue """
 
-    def __init__(self):
+    def __init__(self, car_queue, car_semaphore, empty_semaphore, lock):
         # TODO, you need to add arguments that will pass all of data that 1 factory needs
         # to create cars and to place them in a queue.
-        pass
+        super().__init__()
+        self.car_queue = car_queue
+        self.car_semaphore = car_semaphore
+        self.empty_semaphore = empty_semaphore
+        self.lock = lock
+        
 
 
     def run(self):
         for i in range(CARS_TO_PRODUCE):
             # TODO Add you code here
+            car = Car()
+            self.empty_semaphore.acquire()
+            with self.lock:
+                self.car_queue.put(car)
+            self.car_semaphore.release()
+
             """
             create a car
             place the car on the queue
@@ -93,20 +103,36 @@ class Factory(threading.Thread):
            """
 
         # signal the dealer that there there are not more cars
-        pass
+        self.car_semaphore.release()
+        
 
 
 class Dealer(threading.Thread):
     """ This is a dealer that receives cars """
 
-    def __init__(self):
+    def __init__(self, car_queue, car_semaphore, empty_semaphore, lock, queue_stats):
         # TODO, you need to add arguments that pass all of data that 1 Dealer needs
         # to sell a car
+        super().__init__()
+        self.car_queue = car_queue
+        self.car_semaphore = car_semaphore
+        self.empty_semaphore = empty_semaphore
+        self.lock = lock
+        self.queue_stats = queue_stats
         pass
 
     def run(self):
         while True:
             # TODO Add your code here
+            self.car_semaphore.acquire()
+            
+            with self.lock:
+                if self.car_queue.size() == 0:
+                    break
+                car = self.car_queue.get()
+                self.queue_stats[self.car_queue.size()] += 1
+            self.empty_semaphore.release()
+
             """
             take the car from the queue
             signal the factory that there is an empty slot in the queue
@@ -122,28 +148,39 @@ def main():
     log = Log(show_terminal=True)
 
     # TODO Create semaphore(s)
+    car_semaphore = threading.Semaphore(0)
+    empty_semaphore = threading.Semaphore(MAX_QUEUE_SIZE)
+    
     # TODO Create queue251 
+    car_queue = Queue251()
+
     # TODO Create lock(s) ?
+    lock = threading.Lock()
 
     # This tracks the length of the car queue during receiving cars by the dealership
     # i.e., update this list each time the dealer receives a car
     queue_stats = [0] * MAX_QUEUE_SIZE
 
     # TODO create your one factory
+    factory = Factory(car_queue, car_semaphore, empty_semaphore, lock)
 
     # TODO create your one dealership
-
+    dealer = Dealer(car_queue, car_semaphore, empty_semaphore, lock, queue_stats)
     log.start_timer()
 
     # TODO Start factory and dealership
+    factory.start()
+    dealer.start()
 
     # TODO Wait for factory and dealership to complete
+    factory.join()
+    dealer.join()
 
     log.stop_timer(f'All {sum(queue_stats)} have been created')
 
     xaxis = [i for i in range(1, MAX_QUEUE_SIZE + 1)]
     plot = Plots()
-    plot.bar(xaxis, queue_stats, title=f'{sum(queue_stats)} Produced: Count VS Queue Size', x_label='Queue Size', y_label='Count', filename='Production count vs queue size.png')
+    plot.bar(xaxis, queue_stats, title=f'{sum(queue_stats)} Produced: Count VS Queue Size', x_label='Queue Size', y_label='Count')
 
 
 
